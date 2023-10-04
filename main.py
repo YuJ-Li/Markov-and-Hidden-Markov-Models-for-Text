@@ -1,3 +1,7 @@
+from Levenshtein import distance as dis
+import numpy as np
+
+
 # Read data from unigram_counts
 def read_unigram_data(file_path="./data/unigram_counts.txt"):
     unigram_model = {}
@@ -92,6 +96,19 @@ def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs):
         print(next_word)
         sentence.append(vocab[next_word])
     return sentence
+
+
+def poisson_probability(u, v, lam):
+    # Compute the Poinssson probability P(Et = u | Xt = v)
+    k = dis(u,v)
+    return np.exp(-lam) * lam ** k / np.math.factorial(k)
+
+def viterbi_correction(input_sentence, lam):
+    words = input_sentence.split()
+    num_words = len(words)
+
+
+    return
 
 
 if __name__ == '__main__':
