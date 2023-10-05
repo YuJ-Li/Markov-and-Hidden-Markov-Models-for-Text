@@ -1,5 +1,8 @@
 from Levenshtein import distance as dis
 import numpy as np
+import math
+
+lam = 0.01
 
 
 # Read data from unigram_counts
@@ -100,15 +103,43 @@ def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs):
 
 def poisson_probability(u, v, lam):
     # Compute the Poinssson probability P(Et = u | Xt = v)
-    k = dis(u,v)
-    return np.exp(-lam) * lam ** k / np.math.factorial(k)
+    k = dis(u, v)
+    return np.exp(-lam) * lam ** k / math.factorial(k)
 
-def viterbi_correction(input_sentence, lam):
+
+def viterbi_correction(t, input_sentence, lam, vocab, bigram, corrected_list=None):
     words = input_sentence.split()
-    num_words = len(words)
+    vocabulary = vocab.values()
+    if corrected_list is None:
+        corrected_list = []
 
-
-    return
+    if t == 0:
+        starting_num = get_key_by_value(vocab, "<s>")
+        temp = []
+        for i, word in enumerate(vocabulary):
+            word_num = get_key_by_value(vocab, word)
+            x = bigram.get(starting_num).get(word_num)
+            x = 0 if x is None else x
+            y = poisson_probability("<s>", word, lam)
+            temp.append(x + np.log10(y))
+        max_i = np.argmax(temp)
+        corrected_word = vocab[temp[max_i]]
+        corrected_list.append(corrected_word)
+        return corrected_list
+    else:
+        temp = []
+        prev_word = viterbi_correction(t - 1, input_sentence, lam, vocab, bigram, corrected_list)[-1]
+        starting_num = get_key_by_value(vocab, prev_word)
+        for i, word in enumerate(vocabulary):
+            word_num = get_key_by_value(vocab, word)
+            x = bigram.get(starting_num).get(word_num)
+            x = 0 if x is None else x
+            y = poisson_probability(prev_word, word, lam)
+            temp.append(x + np.log10(y))
+        max_i = np.argmax(temp)
+        corrected_word = vocab[temp[max_i]]
+        corrected_list.append(corrected_word)
+        return corrected_list
 
 
 if __name__ == '__main__':
@@ -117,5 +148,6 @@ if __name__ == '__main__':
     bigram_probs = read_bigram_data()
     trigram_probs = read_trigram_data()
 
-    generated_sentence = prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs)
-    print(" ".join(generated_sentence))
+    inputsentence = "she haf heard them "
+    correct_sentence = viterbi_correction(len(inputsentence), inputsentence, lam, vocab, bigram_probs)
+    print(correct_sentence)
