@@ -101,45 +101,51 @@ def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs):
     return sentence
 
 
-def poisson_probability(u, v, lam):
+def log_poisson_probability(u, v, lam):
     # Compute the Poinssson probability P(Et = u | Xt = v)
     k = dis(u, v)
-    return np.exp(-lam) * lam ** k / math.factorial(k)
+    return np.log10(np.exp(-lam) * lam ** k / math.factorial(k))
 
 
-def viterbi_correction(t, input_sentence, lam, vocab, bigram, corrected_list=None):
+def viterbi_correction(t, input_sentence, lam, vocab, bigram, best_probs=None):
     words = input_sentence.split()
     vocabulary = vocab.values()
-    if corrected_list is None:
-        corrected_list = []
 
     if t == 0:
-        starting_num = get_key_by_value(vocab, "<s>")
-        temp = []
-        for i, word in enumerate(vocabulary):
+        best_probs = []
+        start_num = get_key_by_value(vocab, "<s>")
+        for word in vocabulary:
             word_num = get_key_by_value(vocab, word)
-            x = bigram.get(starting_num).get(word_num)
-            x = 0 if x is None else x
-            y = poisson_probability("<s>", word, lam)
-            temp.append(x + np.log10(y))
-        max_i = np.argmax(temp)
-        corrected_word = vocab[temp[max_i]]
-        corrected_list.append(corrected_word)
-        return corrected_list
+            combi = [word_num]
+            big_prob = bigram.get(start_num).get(word_num)
+            big_prob = 0 if big_prob is None else big_prob
+            poi_prob = log_poisson_probability(words[0], word, lam)
+            best_probs.append((big_prob + poi_prob, combi))
+        return best_probs
     else:
-        temp = []
-        prev_word = viterbi_correction(t - 1, input_sentence, lam, vocab, bigram, corrected_list)[-1]
-        starting_num = get_key_by_value(vocab, prev_word)
-        for i, word in enumerate(vocabulary):
+        b_probs = viterbi_correction(t - 1, input_sentence, lam, vocab, bigram)
+        result = []
+        for word in vocabulary:
             word_num = get_key_by_value(vocab, word)
-            x = bigram.get(starting_num).get(word_num)
-            x = 0 if x is None else x
-            y = poisson_probability(prev_word, word, lam)
-            temp.append(x + np.log10(y))
-        max_i = np.argmax(temp)
-        corrected_word = vocab[temp[max_i]]
-        corrected_list.append(corrected_word)
-        return corrected_list
+            probability = []
+            combination = []
+            for prob in b_probs:
+                comb = list(prob[-1])
+                prevword_num = comb[-1]
+                big_prob_1 = bigram.get(prevword_num)
+                big_prob_1 = 0 if big_prob_1 is None else big_prob_1
+                if big_prob_1:
+                    big_prob = big_prob_1.get(word_num)
+                else:
+                    big_prob = 0
+                big_prob = 0 if big_prob is None else big_prob
+                poi_prob = log_poisson_probability(words[t], word, lam)
+                probability.append(prob[0] + big_prob + poi_prob)
+                comb.append(word_num)
+                combination.append(comb)
+            max_index = np.argmax(probability)
+            result.append((probability[max_index], combination[max_index]))
+        return result
 
 
 if __name__ == '__main__':
@@ -148,6 +154,12 @@ if __name__ == '__main__':
     bigram_probs = read_bigram_data()
     trigram_probs = read_trigram_data()
 
-    inputsentence = "she haf heard them "
-    correct_sentence = viterbi_correction(len(inputsentence), inputsentence, lam, vocab, bigram_probs)
-    print(correct_sentence)
+    inputsentence = "she haf heard them"
+    words = inputsentence.split()
+    correct_sentence = viterbi_correction(len(words)-1, inputsentence, lam, vocab, bigram_probs)
+    p = []
+    for sentence in correct_sentence:
+        p.append(sentence[0])
+    mi = np.argmax(p)
+
+    print(correct_sentence[mi][-1])
