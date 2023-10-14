@@ -1,4 +1,4 @@
-from Levenshtein import distance as dis
+import Levenshtein
 import numpy as np
 import math
 
@@ -96,56 +96,60 @@ def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs):
         else:
             given_words = sentence[-1:]
         next_word = sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words)
-        print(next_word)
         sentence.append(vocab[next_word])
     return sentence
 
 
 def log_poisson_probability(u, v, lam):
     # Compute the Poinssson probability P(Et = u | Xt = v)
-    k = dis(u, v)
-    return np.log10(np.exp(-lam) * lam ** k / math.factorial(k))
+    # Emit P
+    k = Levenshtein.distance(u, v)
+    return k * np.log10(lam) - np.log10(math.factorial(k))
 
 
-def viterbi_correction(t, input_sentence, lam, vocab, bigram, best_probs=None):
-    words = input_sentence.split()
-    vocabulary = vocab.values()
+def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd = 0.01):
+    # Considering the code example on wikipedia https://en.wikipedia.org/wiki/Viterbi_algorithm
+    V = [{}]
+    for st in states:
+        # since they are all log base, therefore multiplication become addition
+        log_emit_p = log_poisson_probability(obs[0], vocab[st], lambd)
+        V[0][st] = {"prob": start_p[st] + log_emit_p, "prev": None}
 
-    if t == 0:
-        best_probs = []
-        start_num = get_key_by_value(vocab, "<s>")
-        for word in vocabulary:
-            word_num = get_key_by_value(vocab, word)
-            combi = [word_num]
-            big_prob = bigram.get(start_num).get(word_num)
-            big_prob = 0 if big_prob is None else big_prob
-            poi_prob = log_poisson_probability(words[0], word, lam)
-            best_probs.append((big_prob + poi_prob, combi))
-        return best_probs
-    else:
-        b_probs = viterbi_correction(t - 1, input_sentence, lam, vocab, bigram)
-        result = []
-        for word in vocabulary:
-            word_num = get_key_by_value(vocab, word)
-            probability = []
-            combination = []
-            for prob in b_probs:
-                comb = list(prob[-1])
-                prevword_num = comb[-1]
-                big_prob_1 = bigram.get(prevword_num)
-                big_prob_1 = 0 if big_prob_1 is None else big_prob_1
-                if big_prob_1:
-                    big_prob = big_prob_1.get(word_num)
-                else:
-                    big_prob = 0
-                big_prob = 0 if big_prob is None else big_prob
-                poi_prob = log_poisson_probability(words[t], word, lam)
-                probability.append(prob[0] + big_prob + poi_prob)
-                comb.append(word_num)
-                combination.append(comb)
-            max_index = np.argmax(probability)
-            result.append((probability[max_index], combination[max_index]))
-        return result
+    # Run Viterbi when t>0
+    for t in range(1, len(obs)):
+        V.append({})
+        for st in states:
+            # Find the maximum probability for the current state at time t
+            log_emit_p = log_poisson_probability(obs[t], vocab[st], lambd)
+            trans_pr = trans_p.get(states[0], {}).get(st, 0)
+            max_tr_prob = V[t - 1][states[0]]["prob"] + trans_pr + log_emit_p
+            prev_st_selected = states[0]
+            for prev_st in states[1:]:
+                tr_prob = V[t - 1][prev_st]["prob"] + trans_pr + log_emit_p
+                if tr_prob > max_tr_prob:
+                    max_tr_prob = tr_prob
+                    prev_st_selected = prev_st
+            max_prob = max_tr_prob
+            V[t][st] = {"prob": max_prob, "prev": prev_st_selected}
+    # Backtrack to find the most likely sequence
+    opt = []
+    max_prob = float('-inf')  # Updated to negative infinity
+    best_st = None
+    # Get most probable state and its backtrack
+    for st, data in V[-1].items():
+        if data["prob"] > max_prob:
+            max_prob = data["prob"]
+            best_st = st
+    opt.append(best_st)
+    previous = best_st
+
+    for t in range(len(V) - 2, -1, -1):
+        opt.insert(0, V[t + 1][previous]["prev"])
+        previous = V[t + 1][previous]["prev"]
+    sentence = []
+    for word in opt:
+        sentence.append(vocab[word])
+    return sentence
 
 
 if __name__ == '__main__':
@@ -154,12 +158,18 @@ if __name__ == '__main__':
     bigram_probs = read_bigram_data()
     trigram_probs = read_trigram_data()
 
-    inputsentence = "she haf heard them"
-    words = inputsentence.split()
-    correct_sentence = viterbi_correction(len(words)-1, inputsentence, lam, vocab, bigram_probs)
-    p = []
-    for sentence in correct_sentence:
-        p.append(sentence[0])
-    mi = np.argmax(p)
+    # Generate sentence
+    generated_sentence = prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs)
+    print(" ".join(generated_sentence))
 
-    print(correct_sentence[mi][-1])
+    # Correct sentence
+    obs1 = ["<s>", "I", "think", "hat", "twelve", "thousand", "pounds"]
+    obs2 = ["<s>", "She", "haf", "heard", "them"]
+    obs3 = ["<s>", "She", "was", "ulreedy", "quit", "live"]
+    obs4 = ["<s>", "John", "knightly", "wasn't", "hard", "at", "word"]
+    obs5 = ["<s>", "he", "said", "nit", "word", "by"]
+    states = list(vocab.keys())
+    start_p = unigram_probs
+    trans_p = bigram_probs
+    result = viterbi_correction(obs5, states, start_p, trans_p, vocab)
+    print("Most likely sequence:", result)
