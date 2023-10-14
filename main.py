@@ -121,11 +121,11 @@ def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd = 0.01):
         for st in states:
             # Find the maximum probability for the current state at time t
             log_emit_p = log_poisson_probability(obs[t], vocab[st], lambd)
-            trans_pr = trans_p.get(states[0], {}).get(st, 0)
+            trans_pr = trans_p.get(states[0], {}).get(st, float('-inf'))
             max_tr_prob = V[t - 1][states[0]]["prob"] + trans_pr + log_emit_p
             prev_st_selected = states[0]
             for prev_st in states[1:]:
-                prev_trans_pr = trans_p.get(prev_st, {}).get(st,0)
+                prev_trans_pr = trans_p.get(prev_st, {}).get(st,float('-inf'))
                 tr_prob = V[t - 1][prev_st]["prob"] + prev_trans_pr + log_emit_p
                 if tr_prob > max_tr_prob:
                     max_tr_prob = tr_prob
