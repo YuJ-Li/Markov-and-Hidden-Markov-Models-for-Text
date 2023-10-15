@@ -1,4 +1,3 @@
-import Levenshtein
 import numpy as np
 import math
 
@@ -9,12 +8,12 @@ the observation given, Markov Model is using for generating a sentence and Hidde
 For generating a sentence: call function generate_sentence(vocab, unigram_probs, bigram_probs, trigram_probs, 
 start) where vocab, unigram_probs, bigram_probs and trigram_probs are all given in main(), modify the starting words 
 "start" to observe different result, be aware that the starting word in "start" has to be '<s>' 
-(for testing, see line 201-202)
+(for testing, see line 222-223)
 
 For correcting a sentence: call function correct_sentence(obs, state, start_pr, trans_pr, vocab) where parameters and 
 some observations are provided in main() (you can also define your owned observation, but make sure it is the same 
 format with the given examples, starting with '<s>') Testing for correcting each sentence might take a several minutes
-(for testing, see line 206-221)
+(for testing, see line 227-242)
 
 !!!!!!!!!
 Be aware that:
@@ -86,7 +85,6 @@ def sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words=N
     translate_word = []
     for word in given_words:
         translate_word.append(get_key_by_value(vocab, word))
-
     if len(translate_word) == 2:
         i, j = translate_word[0], translate_word[1]
         trigram_probs_row = trigram_probs.get(i, {}).get(j, 0)
@@ -95,7 +93,6 @@ def sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words=N
         i = translate_word[0]
         trigram_probs_row = {}
         bigram_probs_row = bigram_probs.get(i, 0)
-
     # Prioritize trigram, then bigram, and finally unigram if needed, back off
     if trigram_probs_row:
         next_token = max(trigram_probs_row.keys(), key=trigram_probs_row.get)
@@ -113,7 +110,7 @@ def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs, start):
     sentence += start
     index = 0
     while sentence[-1] != "</s>" and index < 100:
-        if len(sentence) - 1 > 1:
+        if len(sentence) - 1 >= 1:
             given_words = sentence[-2:]
         else:
             given_words = sentence[-1:]
@@ -126,7 +123,7 @@ def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs, start):
 def log_poisson_probability(u, v, lam):
     # Compute the Poinssson probability P(Et = u | Xt = v)
     # Emit P
-    k = Levenshtein.distance(u, v)
+    k = levenshtein(u, v)
     return k * np.log10(lam) - np.log10(math.factorial(k))
 
 
@@ -179,6 +176,30 @@ def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd=0.01):
     return sentence
 
 
+def levenshtein(s1, s2):
+    # Dynamic Programming algorithm to compute the Levenshtein distance between two strings
+    # Obtained from https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#Python
+    if len(s1) < len(s2):
+        return levenshtein(s2, s1)
+
+    # len(s1) >= len(s2)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[
+                             j + 1] + 1  # j+1 instead of j since previous_row and current_row are one character longer
+            deletions = current_row[j] + 1  # than s2
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
 def generate_sentence(vocab, unigram_probs, bigram_probs, trigram_probs, start):
     generated_sentence = prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs, start)
     print(f"{'Generated Sentence: '} {' '.join(generated_sentence)}")
@@ -198,7 +219,7 @@ if __name__ == '__main__':
     trigram = read_trigram_data()
 
     ''' generate a sentence giving a starting word '''
-    starting_words = '<s> I read'
+    starting_words = '<s> I hate'
     generate_sentence(vocabularies, unigram, bigram, trigram, starting_words)
 
     ''' Correct sentence given an observation (Testing may take a 1-2 min for each obs)'''
