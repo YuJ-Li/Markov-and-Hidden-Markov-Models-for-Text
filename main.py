@@ -2,7 +2,27 @@ import Levenshtein
 import numpy as np
 import math
 
-lam = 0.01
+'''
+This program main does 2 thing: generate a sentence base on the first word given and correct a sentence base on 
+the observation given, Markov Model is using for generating a sentence and Hidden Markov model is used for correction
+
+For generating a sentence: call function generate_sentence(vocab, unigram_probs, bigram_probs, trigram_probs, 
+start) where vocab, unigram_probs, bigram_probs and trigram_probs are all given in main(), modify the starting words 
+"start" to observe different result, be aware that the starting word in "start" has to be '<s>' 
+(for testing, see line 201-202)
+
+For correcting a sentence: call function correct_sentence(obs, state, start_pr, trans_pr, vocab) where parameters and 
+some observations are provided in main() (you can also define your owned observation, but make sure it is the same 
+format with the given examples, starting with '<s>') Testing for correcting each sentence might take a several minutes
+(for testing, see line 206-221)
+
+!!!!!!!!!
+Be aware that:
+ 1. library Levenshtein is used for the calculation of distance between words
+ 2. viterbi_correction is implemented based on the pseudocode and code example provided on wikipedia
+    https://en.wikipedia.org/wiki/Viterbi_algorithm
+!!!!!!!!!
+'''
 
 
 # Read data from unigram_counts
@@ -56,7 +76,6 @@ def read_vocab_data(file_path="./data/vocab.txt"):
 
 
 def get_key_by_value(dict, tar_value):
-    keys = []
     for key, value in dict.items():
         if value == tar_value:
             return key
@@ -68,14 +87,14 @@ def sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words=N
     for word in given_words:
         translate_word.append(get_key_by_value(vocab, word))
 
-    if len(given_words) == 2:
+    if len(translate_word) == 2:
         i, j = translate_word[0], translate_word[1]
-        trigram_probs_row = trigram_probs.get(i, {}).get(j, {})
-        bigram_probs_row = bigram_probs.get(j, {})
+        trigram_probs_row = trigram_probs.get(i, {}).get(j, 0)
+        bigram_probs_row = bigram_probs.get(j, 0)
     else:
         i = translate_word[0]
         trigram_probs_row = {}
-        bigram_probs_row = bigram_probs.get(i, {})
+        bigram_probs_row = bigram_probs.get(i, 0)
 
     # Prioritize trigram, then bigram, and finally unigram if needed, back off
     if trigram_probs_row:
@@ -88,15 +107,19 @@ def sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words=N
     return next_token
 
 
-def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs):
-    sentence = ["<s>"]
-    while sentence[-1] != "</s>":
-        if len(sentence) > 1:
+def prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs, start):
+    sentence = []
+    start = start.strip().split()
+    sentence += start
+    index = 0
+    while sentence[-1] != "</s>" and index < 100:
+        if len(sentence) - 1 > 1:
             given_words = sentence[-2:]
         else:
             given_words = sentence[-1:]
         next_word = sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words)
         sentence.append(vocab[next_word])
+        index += 1
     return sentence
 
 
@@ -107,13 +130,16 @@ def log_poisson_probability(u, v, lam):
     return k * np.log10(lam) - np.log10(math.factorial(k))
 
 
-def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd = 0.01):
-    # Considering the code example on wikipedia https://en.wikipedia.org/wiki/Viterbi_algorithm
+def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd=0.01):
+    # Implementation based on the pseudocode and code example on wikipedia
+    # https://en.wikipedia.org/wiki/Viterbi_algorithm
+    # lambd is by default set to 0.01
     V = [{}]
     for st in states:
         # since they are all log base, therefore multiplication become addition
+        key = get_key_by_value(vocab, '<s>')
         log_emit_p = log_poisson_probability(obs[0], vocab[st], lambd)
-        V[0][st] = {"prob": start_p[st] + log_emit_p, "prev": None}
+        V[0][st] = {"prob": start_p[key] + log_emit_p, "prev": None}
 
     # Run Viterbi when t>0
     for t in range(1, len(obs)):
@@ -125,7 +151,7 @@ def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd = 0.01):
             max_tr_prob = V[t - 1][states[0]]["prob"] + trans_pr + log_emit_p
             prev_st_selected = states[0]
             for prev_st in states[1:]:
-                prev_trans_pr = trans_p.get(prev_st, {}).get(st,float('-inf'))
+                prev_trans_pr = trans_p.get(prev_st, {}).get(st, float('-inf'))
                 tr_prob = V[t - 1][prev_st]["prob"] + prev_trans_pr + log_emit_p
                 if tr_prob > max_tr_prob:
                     max_tr_prob = tr_prob
@@ -153,24 +179,43 @@ def viterbi_correction(obs, states, start_p, trans_p, vocab, lambd = 0.01):
     return sentence
 
 
+def generate_sentence(vocab, unigram_probs, bigram_probs, trigram_probs, start):
+    generated_sentence = prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs, start)
+    print(f"{'Generated Sentence: '} {' '.join(generated_sentence)}")
+
+
+def correct_sentence(obs, state, start_pr, trans_pr, vocab):
+    result = viterbi_correction(obs, state, start_pr, trans_pr, vocab)
+    print(f"{'Original: '} {' '.join(obs)}")
+    print(f"{'Corrected: '} {' '.join(result)}")
+
+
 if __name__ == '__main__':
-    vocab = read_vocab_data()
-    unigram_probs = read_unigram_data()
-    bigram_probs = read_bigram_data()
-    trigram_probs = read_trigram_data()
+    # read in dictionary and probability files
+    vocabularies = read_vocab_data()
+    unigram = read_unigram_data()
+    bigram = read_bigram_data()
+    trigram = read_trigram_data()
 
-    # Generate sentence
-    generated_sentence = prior_sample(vocab, unigram_probs, bigram_probs, trigram_probs)
-    print(" ".join(generated_sentence))
+    ''' generate a sentence giving a starting word '''
+    starting_words = '<s> I read'
+    generate_sentence(vocabularies, unigram, bigram, trigram, starting_words)
 
-    # Correct sentence
+    ''' Correct sentence given an observation (Testing may take a 1-2 min for each obs)'''
+    # observations (in form of list, the starting char must be "<s>")
     obs1 = ["<s>", "I", "think", "hat", "twelve", "thousand", "pounds"]
     obs2 = ["<s>", "She", "haf", "heard", "them"]
     obs3 = ["<s>", "She", "was", "ulreedy", "quit", "live"]
     obs4 = ["<s>", "John", "knightly", "wasn't", "hard", "at", "word"]
     obs5 = ["<s>", "he", "said", "nit", "word", "by"]
-    states = list(vocab.keys())
-    start_p = unigram_probs
-    trans_p = bigram_probs
-    result = viterbi_correction(obs5, states, start_p, trans_p, vocab)
-    print("Most likely sequence:", result)
+    observations = [obs1, obs2, obs3, obs4, obs5]
+    # parameters
+    states = list(vocabularies.keys())
+    start_p = unigram
+    trans_p = bigram
+
+    for observ in observations:
+        correct_sentence(observ, states, start_p, trans_p, vocabularies)
+
+    # if you do not want to test all of them, you can test them 1 by 1 as the following
+    # correct_sentence(obs1, states, start_p, trans_p, vocabularies)
