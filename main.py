@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import math
 
@@ -8,12 +9,12 @@ the observation given, Markov Model is using for generating a sentence and Hidde
 For generating a sentence: call function generate_sentence(vocab, unigram_probs, bigram_probs, trigram_probs, 
 start) where vocab, unigram_probs, bigram_probs and trigram_probs are all given in main(), modify the starting words 
 "start" to observe different result, be aware that the starting word in "start" has to be '<s>' 
-(for testing, see line 222-223)
+(for testing, see line 223-226)
 
 For correcting a sentence: call function correct_sentence(obs, state, start_pr, trans_pr, vocab) where parameters and 
 some observations are provided in main() (you can also define your owned observation, but make sure it is the same 
 format with the given examples, starting with '<s>') Testing for correcting each sentence might take a several minutes
-(for testing, see line 227-242)
+(for testing, see line 229-245)
 
 !!!!!!!!!
 Be aware that:
@@ -95,11 +96,11 @@ def sample_word(vocab, unigram_probs, bigram_probs, trigram_probs, given_words=N
         bigram_probs_row = bigram_probs.get(i, 0)
     # Prioritize trigram, then bigram, and finally unigram if needed, back off
     if trigram_probs_row:
-        next_token = max(trigram_probs_row.keys(), key=trigram_probs_row.get)
+        next_token = random.choice(list(trigram_probs_row.keys()))
     elif bigram_probs_row:
-        next_token = max(bigram_probs_row.keys(), key=bigram_probs_row.get)
+        next_token = random.choice(list(bigram_probs_row.keys()))
     else:
-        next_token = max(unigram_probs.keys(), key=unigram_probs.get)
+        next_token = random.choice(list(unigram_probs.keys()))
 
     return next_token
 
@@ -219,8 +220,10 @@ if __name__ == '__main__':
     trigram = read_trigram_data()
 
     ''' generate a sentence giving a starting word '''
-    starting_words = '<s> I hate'
-    generate_sentence(vocabularies, unigram, bigram, trigram, starting_words)
+    starting_words = '<s>'
+    for i in range(10):
+        # generate 10 sentences
+        generate_sentence(vocabularies, unigram, bigram, trigram, starting_words)
 
     ''' Correct sentence given an observation (Testing may take a 1-2 min for each obs)'''
     # observations (in form of list, the starting char must be "<s>")
